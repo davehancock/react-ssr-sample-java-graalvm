@@ -1,0 +1,73 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/react-ssr-sample-java-graalvm
+    docker:
+      - image: circleci/openjdk:11.0-jdk-node-browsers
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          key: frontend-deps-{{ checksum "package.json" }}
+      - restore_cache:
+          key: backend-deps-{{ checksum "build.gradle" }}
+
+      - run:
+          name: Install Frontend
+          command: yarn install
+
+      - run:
+          name: Build Frontend
+          command: yarn build
+
+      - run:
+          name: Build Backend
+          command: ./gradlew build
+
+      - save_cache:
+          key: frontend-deps-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+      - save_cache:
+          key: backend-deps-{{ checksum "build.gradle" }}
+          paths:
+            - ~/.gradle
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - 'Dockerfile'
+            - 'build/libs/app.jar'
+
+  deploy:
+    working_directory: ~/react-ssr-sample-java-graalvm
+    machine: true
+
+    steps:
+      - attach_workspace:
+          at: ~/react-ssr-sample-java-graalvm
+
+      - run:
+          name: Docker Build
+          command: docker build -t daves125125/react-ssr-sample-java-graalvm .
+
+      - run:
+          name: Docker Login
+          command: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+
+      - run:
+          name: Docker Push
+          command: docker push daves125125/react-ssr-sample-java-graalvm
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
